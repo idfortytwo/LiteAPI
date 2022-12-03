@@ -12,7 +12,6 @@ from liteapi.routing import RoutingMixin, Router
 class App(RoutingMixin):
     def __init__(self):
         self._endpoints: Dict[str, Endpoint] = {}
-        self._base_router = Router()
         self._middlewares: List[Middleware] = []
 
     def add_router(self, router: Router, *, prefix: str = ""):
@@ -72,7 +71,8 @@ async def _send_response(send: Callable, body: Any, status_code: int, content_ty
     if content_type.startswith('image') or \
             content_type.startswith('audio') or \
             content_type.startswith('video') or \
-            content_type == 'application/octet-stream':
+            content_type == 'application/octet-stream' or \
+            isinstance(body, bytes):
 
         if isinstance(body, list):
             for chunk in body:

@@ -52,7 +52,8 @@ async def _read_body(receive) -> bytes:
 async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Tuple[Any, int, str]:
     parsed_args = {}
 
-    error_response = _parse_args(endpoint, args, parsed_args)
+    sig = inspect.signature(endpoint.func)
+    error_response = _validate_and_convert_args(sig, args, parsed_args)
     if error_response:
         return error_response
 
@@ -61,6 +62,13 @@ async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Tuple[An
             result = await endpoint.func(**parsed_args)
         else:
             result = endpoint.func(**parsed_args)
+
+        match result:
+            case result, int(code):
+                pass
+            case result:
+                code = endpoint.status_code
+
     except Exception as e:
         response = {
             'message': 'internal server error',
@@ -69,11 +77,10 @@ async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Tuple[An
         }
         return response, 500, 'application/json'
 
-    return result, endpoint.status_code, endpoint.content_type
+    return result, code, endpoint.content_type
 
 
-def _parse_args(endpoint: Endpoint, args: Dict, parsed_args: Dict):
-    sig = inspect.signature(endpoint.func)
+def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: Dict):
     for param in sig.parameters.values():
         cls = param.annotation
 

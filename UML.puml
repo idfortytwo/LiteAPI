@@ -1,0 +1,66 @@
+@startuml
+
+class RoutingMixin {
+    - _endpoints: Dict[str, Endpoint]
+    + route(str, str, int, str): Callable
+    + get(str, int, str): Callable
+    + post(str, int, str): Callable
+    + put(str, int, str): Callable
+    + patch(str, int, str): Callable
+    + delete(str, int, str): Callable
+}
+
+class App {
+    - _endpoints: Dict[str, Endpoint]
+    - _middlewares: List[Middleware]
+
+    + add_router(Router, str)
+    + add_middleware(Middleware)
+    + __call__(Dict, Callable, Callable)
+    - _handle(Dict, Callable, Callable)
+    - _parse_path(str, str): Endpoint, Dict
+    - _send_response(Callable, Any, int, str)
+}
+
+
+class Router {
+    - _endpoints: Dict[str, Endpoint]
+    - _prefix: str
+    + endpoints(): Dict[str, Endpoint]
+    + prefix(): str
+}
+
+class Endpoint {
+    + func: Callable
+    + http_method: str
+    + status_code: int
+    + content_type: str
+}
+
+abstract class Middleware {
+    + {abstract} handle(Dict, Callable, Callable): Dict, Callable, Callable
+}
+
+class parsing {
+    - _parse_query_params(str): Dict[str, str]
+    - _parse_body(Callable, str) -> Dict[str, Any]
+    - _read_body(Callable) -> bytes:
+    - _handle_endpoint(Endpoint, Dict[str, Any]) -> Any, int, str:
+    - _parse_args(Endpoint, Dict, Dict)
+}
+
+
+Router -u-|> RoutingMixin
+App -u-|> RoutingMixin
+
+Router "*" *-- "*" Endpoint
+App "1" *-- "*" Endpoint
+
+App "1" o-l- "*" Router
+
+App "1" *-u- "*" Middleware
+App o-r-  parsing
+
+parsing o-- "*" Endpoint
+
+@enduml
