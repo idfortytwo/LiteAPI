@@ -1,6 +1,7 @@
 import cgi
 import inspect
 import json
+import traceback
 from io import BytesIO
 from typing import Dict, Any, Tuple
 
@@ -51,6 +52,27 @@ async def _read_body(receive) -> bytes:
 async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Tuple[Any, int, str]:
     parsed_args = {}
 
+    error_response = _parse_args(endpoint, args, parsed_args)
+    if error_response:
+        return error_response
+
+    try:
+        if inspect.iscoroutinefunction(endpoint.func):
+            result = await endpoint.func(**parsed_args)
+        else:
+            result = endpoint.func(**parsed_args)
+    except Exception as e:
+        response = {
+            'message': 'internal server error',
+            'error': str(e),
+            'details': traceback.format_exc()
+        }
+        return response, 500, 'application/json'
+
+    return result, endpoint.status_code, endpoint.content_type
+
+
+def _parse_args(endpoint: Endpoint, args: Dict, parsed_args: Dict):
     sig = inspect.signature(endpoint.func)
     for param in sig.parameters.values():
         cls = param.annotation
@@ -61,39 +83,32 @@ async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Tuple[An
             else:
                 arg = cls(args[param.name])
         except ValidationError as e:
-            response = json.dumps({
+            response = {
                 'message': 'validation failed',
                 'details': e.errors()
-            })
+            }
             return response, 400, 'application/json'
         except ValueError:
-            response = json.dumps({
+            response = {
                 'message': 'conversion failed',
                 'details': {
                     'param_name': param.name,
                     'param_type': cls.__name__,
                     'value': args[param.name]
                 }
-            })
+            }
             return response, 400, 'application/json'
         except KeyError:
             if param.default == inspect.Parameter.empty:
-                response = json.dumps({
+                response = {
                     'message': 'missing required argument',
                     'details': {
                         'param_name': param.name,
                         'param_type': cls.__name__
                     }
-                })
+                }
                 return response, 400, 'application/json'
             else:
                 arg = param.default
 
         parsed_args[param.name] = arg
-
-    if inspect.iscoroutinefunction(endpoint.func):
-        result = await endpoint.func(**parsed_args)
-    else:
-        result = endpoint.func(**parsed_args)
-
-    return result, endpoint.status_code, endpoint.content_type
