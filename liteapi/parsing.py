@@ -4,7 +4,8 @@ import json
 import traceback
 from dataclasses import dataclass, field
 from io import BytesIO
-from typing import Dict, Any, Tuple
+from json import JSONEncoder
+from typing import Dict, Any, Tuple, List
 
 from pydantic import BaseModel, ValidationError
 
@@ -45,6 +46,14 @@ def _parse_query_params(query_params: str) -> Dict[str, str]:
             key, value = param.split('=')
             params[key] = value
     return params
+
+
+class PydanticEncoder(JSONEncoder):
+    def default(self, o):
+        if isinstance(o, BaseModel):
+            return o.dict()
+        else:
+            return super().default(o)
 
 
 async def _parse_body(receive, content_type) -> Dict[str, Any]:

@@ -82,6 +82,17 @@ async def download_image(image_name: str):
         return resp
 
 
+@app.get('/model-output', content_type='application/json')
+def hello_model():
+    return {
+        "models": [
+            TestModel(some_string="some_string", some_float=3.14, numbers=[1, 2, 3]),
+            TestModel(some_string="some_string", some_float=6.28, numbers=[2, 4, 6])
+        ],
+        "count": 2
+    }
+
+
 html_router = Router('/html')
 json_router = Router('/json')
 text_router = Router()

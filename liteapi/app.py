@@ -5,7 +5,7 @@ from parse import parse
 
 from liteapi.endpoint import Endpoint, not_found
 from liteapi.middleware import Middleware
-from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint, Scope
+from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint, Scope, PydanticEncoder
 from liteapi.routing import RoutingMixin, Router
 
 
@@ -93,7 +93,7 @@ async def _send_response(send: Callable, body: Any, status_code: int, content_ty
             })
     else:
         if content_type == 'application/json':
-            body = json.dumps(body).encode()
+            body = json.dumps(body, cls=PydanticEncoder).encode()
         else:
             body = str.encode(body)
 
