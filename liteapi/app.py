@@ -5,7 +5,7 @@ from parse import parse
 
 from liteapi.endpoint import Endpoint, not_found
 from liteapi.middleware import Middleware
-from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint
+from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint, Scope
 from liteapi.routing import RoutingMixin, Router
 
 
@@ -27,22 +27,23 @@ class App(RoutingMixin):
     def add_middleware(self, cls: Middleware):
         self._middlewares.append(cls)
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: dict, receive: Callable, send: Callable):
+        scope = Scope(**scope)
         for middleware in self._middlewares:
             scope, receive, send = await middleware.handle(scope, receive, send)
         await self._handle(scope, receive, send)
 
-    async def _handle(self, scope, receive, send):
-        method = scope['method']
-        path = scope['path']
-        headers = scope['headers']
+    async def _handle(self, scope: Scope, receive, send):
+        method = scope.method
+        path = scope.path
+        headers = scope.headers
 
         content_type = None
-        for key, value in headers:
-            if key == b'content-type':
-                content_type = value.decode()
+        for key, value in headers.items():
+            if key == 'content-type':
+                content_type = value
 
-        query_args = _parse_query_params(scope['query_string'].decode())
+        query_args = _parse_query_params(scope.query_string.decode())
         body_args = await _parse_body(receive, content_type)
         endpoint, path_args = self._parse_path(path, method)
 

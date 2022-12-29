@@ -1,8 +1,10 @@
 import abc
-from typing import Tuple, Dict, Callable
+from typing import Tuple, Callable
+
+from liteapi.parsing import Scope
 
 
 class Middleware(abc.ABC):
     @abc.abstractmethod
-    async def handle(self, scope: Dict, receive: Callable, send: Callable) -> Tuple[Dict, Callable, Callable]:
+    async def handle(self, scope: Scope, receive: Callable, send: Callable) -> Tuple[Scope, Callable, Callable]:
         pass

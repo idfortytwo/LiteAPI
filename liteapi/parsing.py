@@ -2,12 +2,40 @@ import cgi
 import inspect
 import json
 import traceback
+from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Dict, Any, Tuple
 
 from pydantic import BaseModel, ValidationError
 
 from liteapi.endpoint import Endpoint
+
+
+@dataclass
+class Scope:
+    type: str
+    asgi: Dict[str, str]
+    http_version: str
+    server: Tuple[str, int]
+    client: Tuple[str, int]
+    scheme: str
+    method: str
+    root_path: str
+    path: str
+    raw_path: bytes
+    query_string: bytes
+    headers: Dict[str, str]
+    _headers: Dict[str, str] = field(repr=False, init=False)
+
+    @property
+    def headers(self):
+        return self._headers
+
+    @headers.setter
+    def headers(self, headers: List[Tuple[bytes, bytes]]):
+        self._headers = {}
+        for key, value in headers:
+            self._headers[key.decode()] = value.decode()
 
 
 def _parse_query_params(query_params: str) -> Dict[str, str]:

@@ -109,13 +109,13 @@ app.add_router(text_router, prefix='/plaintext')
 
 class LogPath(Middleware):
     async def handle(self, scope, receive, send):
-        print(f'path: {scope["path"]}')
+        print(f'path: {scope.path}')
         return scope, receive, send
 
 
 class LogMethod(Middleware):
     async def handle(self, scope, receive, send):
-        print(f'method: {scope["method"]}')
+        print(f'method: {scope.method}')
         return scope, receive, send
 
 
