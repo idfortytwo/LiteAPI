@@ -5,7 +5,7 @@ from parse import parse
 
 from liteapi.endpoint import Endpoint, not_found
 from liteapi.middleware import Middleware
-from liteapi.openapi import get_doc_json_endpoint, get_doc_endpoint
+from liteapi.openapi import OpenAPI
 from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint, Scope, PydanticEncoder
 from liteapi.routing import RoutingMixin, Router
 
@@ -27,11 +27,14 @@ class App(RoutingMixin):
         self._setup_openapi()
 
     def _setup_openapi(self):
-        doc_endpoint = get_doc_endpoint(self._doc_json_path)
-        doc_json_endpoint = get_doc_json_endpoint(self)
-
-        self.get(self._doc_path, content_type='text/html')(doc_endpoint)
-        self.get(self._doc_json_path, content_type='application/json')(doc_json_endpoint)
+        openapi = OpenAPI(
+            endpoints=self._endpoints,
+            doc_path=self._doc_path,
+            doc_json_path=self._doc_json_path,
+            app_title=self._title
+        )
+        self.get(self._doc_path, content_type='text/html')(openapi.doc_endpoint)
+        self.get(self._doc_json_path, content_type='application/json')(openapi.doc_json_endpoint)
 
     def add_router(self, router: Router, *, prefix: str = ''):
         if prefix:
