@@ -5,24 +5,45 @@ from parse import parse
 
 from liteapi.endpoint import Endpoint, not_found
 from liteapi.middleware import Middleware
+from liteapi.openapi import get_doc_json_endpoint, get_doc_endpoint
 from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint, Scope, PydanticEncoder
 from liteapi.routing import RoutingMixin, Router
 
 
 class App(RoutingMixin):
-    def __init__(self):
-        self._endpoints: Dict[str, Endpoint] = {}
+    def __init__(
+            self,
+            title='Application',
+            doc_path='/api',
+            doc_json_path='/api_json'
+    ):
+        self._endpoints: Dict[str, Dict[str, Endpoint]] = {}
         self._middlewares: List[Middleware] = []
 
-    def add_router(self, router: Router, *, prefix: str = ""):
-        if not prefix:
-            prefix = router.prefix
+        self._title = title
+        self._doc_path = doc_path
+        self._doc_json_path = doc_json_path
 
-        self._endpoints.update({
-            prefix + route: endpoint
-            for route, endpoint
-            in router.endpoints.items()
-        })
+        self._setup_openapi()
+
+    def _setup_openapi(self):
+        doc_endpoint = get_doc_endpoint(self._doc_json_path)
+        doc_json_endpoint = get_doc_json_endpoint(self)
+
+        self.get(self._doc_path, content_type='text/html')(doc_endpoint)
+        self.get(self._doc_json_path, content_type='application/json')(doc_json_endpoint)
+
+    def add_router(self, router: Router, *, prefix: str = ''):
+        if prefix:
+            router.prefix = prefix
+
+        new_endpoints = {}
+        for route, endpoints in router.endpoints.items():
+            for endpoint in endpoints.values():
+                endpoint.tags = router.tag
+            new_endpoints[router.prefix + route] = endpoints
+
+        self._endpoints.update(new_endpoints)
 
     def add_middleware(self, cls: Middleware):
         self._middlewares.append(cls)
@@ -52,9 +73,13 @@ class App(RoutingMixin):
         await _send_response(send, result, code, content_type)
 
     def _parse_path(self, path: str, method: str) -> Tuple[Endpoint, Dict[str, Any]]:
-        for route, endpoint in self._endpoints.items():
+        for route, endpoints in self._endpoints.items():
             path_match = parse(route, path)
-            if path_match and endpoint.http_method in [method, 'ANY']:
+            if path_match:
+                endpoint = endpoints.get(
+                    method,
+                    endpoints.get('ANY', not_found)
+                )
                 return endpoint, path_match.named
 
         return not_found, {}
@@ -95,7 +120,7 @@ async def _send_response(send: Callable, body: Any, status_code: int, content_ty
         if content_type == 'application/json':
             body = json.dumps(body, cls=PydanticEncoder).encode()
         else:
-            body = str.encode(body)
+            body = str(body).encode()
 
         await send({
             'type': 'http.response.body',

@@ -1,5 +1,5 @@
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from pydantic import BaseModel
 
@@ -54,7 +54,7 @@ def validate_input(
     return 'ok'
 
 
-@app.route('/upload', content_type='text/plain')
+@app.post('/upload', content_type='text/plain')
 async def files_and_form_data(
         filename1: str,
         filename2: str,
@@ -82,8 +82,24 @@ async def download_image(image_name: str):
         return resp
 
 
-@app.get('/model-output', content_type='application/json')
-def hello_model():
+model_router = Router('/models')
+
+
+@model_router.get('/model-output', content_type='application/json')
+def single_model() -> TestModel:
+    return TestModel(some_string="some_string", some_float=3.14, numbers=[1, 2, 3])
+
+
+@model_router.get('/list-output', content_type='application/json')
+def model_list() -> List[TestModel]:
+    return [
+        TestModel(some_string="some_string", some_float=3.14, numbers=[1, 2, 3]),
+        TestModel(some_string="some_string", some_float=6.28, numbers=[2, 4, 6])
+    ]
+
+
+@model_router.get('/mixed-output', content_type='application/json')
+def mixed_model_dict() -> Dict:
     return {
         "models": [
             TestModel(some_string="some_string", some_float=3.14, numbers=[1, 2, 3]),
@@ -116,6 +132,7 @@ def hello_text():
 app.add_router(html_router)
 app.add_router(json_router)
 app.add_router(text_router, prefix='/plaintext')
+app.add_router(model_router)
 
 
 class LogPath(Middleware):

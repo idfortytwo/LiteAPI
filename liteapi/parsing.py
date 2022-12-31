@@ -5,7 +5,7 @@ import traceback
 from dataclasses import dataclass, field
 from io import BytesIO
 from json import JSONEncoder
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, get_origin, Union, get_args
 
 from pydantic import BaseModel, ValidationError
 
@@ -89,8 +89,7 @@ async def _read_body(receive) -> bytes:
 async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Tuple[Any, int, str]:
     parsed_args = {}
 
-    sig = inspect.signature(endpoint.func)
-    error_response = _validate_and_convert_args(sig, args, parsed_args)
+    error_response = _validate_and_convert_args(endpoint.signature, args, parsed_args)
     if error_response:
         return error_response
 
@@ -120,8 +119,11 @@ async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Tuple[An
 def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: Dict):
     for param in sig.parameters.values():
         cls = param.annotation
+        optional = is_optional(param)
 
         try:
+            if optional:
+                cls = extract_from_optional(param)
             if issubclass(cls, BaseModel):
                 arg = cls(**args)
             else:
@@ -143,7 +145,9 @@ def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: 
             }
             return response, 400, 'application/json'
         except KeyError:
-            if param.default == inspect.Parameter.empty:
+            if optional:
+                arg = None
+            elif param.default == inspect.Parameter.empty:
                 response = {
                     'message': 'missing required argument',
                     'details': {
@@ -156,3 +160,11 @@ def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: 
                 arg = param.default
 
         parsed_args[param.name] = arg
+
+
+def is_optional(param: inspect.Parameter):
+    return get_origin(param.annotation) is Union and type(None) in get_args(param.annotation)
+
+
+def extract_from_optional(param: inspect.Parameter):
+    return get_args(param.annotation)[0]
