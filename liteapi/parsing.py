@@ -4,12 +4,12 @@ import json
 import traceback
 from dataclasses import dataclass, field
 from io import BytesIO
-from json import JSONEncoder
 from typing import Dict, Any, Tuple, List, get_origin, Union, get_args
 
 from pydantic import BaseModel, ValidationError
 
 from liteapi.endpoint import Endpoint
+from liteapi.responses import Response, JSONResponse, response_factory
 
 
 @dataclass
@@ -48,14 +48,6 @@ def _parse_query_params(query_params: str) -> Dict[str, str]:
     return params
 
 
-class PydanticEncoder(JSONEncoder):
-    def default(self, o):
-        if isinstance(o, BaseModel):
-            return o.dict()
-        else:
-            return super().default(o)
-
-
 async def _parse_body(receive, content_type) -> Dict[str, Any]:
     if content_type:
         body = await _read_body(receive)
@@ -86,7 +78,7 @@ async def _read_body(receive) -> bytes:
     return body
 
 
-async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Tuple[Any, int, str]:
+async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Response:
     parsed_args = {}
 
     error_response = _validate_and_convert_args(endpoint.signature, args, parsed_args)
@@ -98,22 +90,21 @@ async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Tuple[An
             result = await endpoint.func(**parsed_args)
         else:
             result = endpoint.func(**parsed_args)
-
-        match result:
-            case result, int(code):
-                pass
-            case result:
-                code = endpoint.status_code
-
     except Exception as e:
         response = {
             'message': 'internal server error',
             'error': str(e),
             'details': traceback.format_exc()
         }
-        return response, 500, 'application/json'
+        return JSONResponse(response, 500)
 
-    return result, code, endpoint.content_type
+    match result:
+        case Response():
+            return result
+        case data, int(code):
+            return response_factory(data, code, endpoint.content_type)
+        case data:
+            return response_factory(data, endpoint.status_code, endpoint.content_type)
 
 
 def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: Dict):
@@ -133,7 +124,7 @@ def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: 
                 'message': 'validation failed',
                 'details': e.errors()
             }
-            return response, 400, 'application/json'
+            return JSONResponse(response, 400)
         except ValueError:
             response = {
                 'message': 'conversion failed',
@@ -143,7 +134,7 @@ def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: 
                     'value': args[param.name]
                 }
             }
-            return response, 400, 'application/json'
+            return JSONResponse(response, 400)
         except KeyError:
             if optional:
                 arg = None
@@ -155,7 +146,7 @@ def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: 
                         'param_type': cls.__name__
                     }
                 }
-                return response, 400, 'application/json'
+                return JSONResponse(response, 400)
             else:
                 arg = param.default
 

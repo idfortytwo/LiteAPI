@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from liteapi.endpoint import Endpoint
 from liteapi.parsing import is_optional
+from liteapi.responses import HTMLResponse, JSONResponse
 
 
 class OpenAPI:
@@ -25,8 +26,8 @@ class OpenAPI:
 
         self._schemas: Set[Type[BaseModel]] = set()
 
-    def doc_endpoint(self) -> str:
-        return f'''
+    def doc_endpoint(self) -> HTMLResponse:
+        return HTMLResponse(f'''
             <!DOCTYPE html>
             <html lang='en'>
             <head>
@@ -49,10 +50,10 @@ class OpenAPI:
             </script>
             </body>
             </html>
-        '''
+        ''')
 
     @lru_cache
-    def doc_json_endpoint(self) -> Dict[str, Any]:
+    def doc_json_endpoint(self) -> JSONResponse:
         paths = {}
         for path, endpoints in self._endpoints.items():
             if path in [self._doc_path, self._doc_json_path]:
@@ -81,7 +82,7 @@ class OpenAPI:
             'paths': paths,
             'components': components,
         }
-        return openapi_json
+        return JSONResponse(openapi_json)
 
     def _get_endpoint_data(self, endpoint: Endpoint, path: str) -> Dict[str, Any]:
         endpoint_data = {

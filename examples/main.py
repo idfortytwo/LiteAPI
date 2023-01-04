@@ -4,6 +4,7 @@ from typing import List, Optional, Dict
 from pydantic import BaseModel
 
 from liteapi import App, Router, Middleware
+from liteapi.responses import JSONResponse, Response, ChunkedBinaryResponse
 
 app = App()
 
@@ -74,7 +75,7 @@ async def files_and_form_data(
 
 
 @app.get('/download', content_type='image/png')
-async def download_image(image_name: str):
+async def download_image(image_name: str = 'a'):
     with open(f'downloaded/{image_name}.png', 'rb') as f:
         resp = []
         while chunk := f.read(1024):
@@ -116,17 +117,17 @@ text_router = Router()
 
 @html_router.get('/hello1', content_type='text/html')
 def hello_html():
-    return '<h1>hello in HTML</h1>'
+    return '<h1>hello in HTML</h1>', 201
 
 
 @json_router.patch('/hello2', content_type='application/json')
 def hello_json():
-    return 'hello in JSON'
+    return {'text': 'hello in JSON'}, 202
 
 
 @text_router.delete('/hello3', content_type='text/plain')
 def hello_text():
-    return 'hello in plaintext'
+    return 'hello in plaintext', 203
 
 
 app.add_router(html_router)

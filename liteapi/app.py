@@ -1,4 +1,3 @@
-import json
 from typing import Callable, Dict, Tuple, Any, List
 
 from parse import parse
@@ -6,7 +5,8 @@ from parse import parse
 from liteapi.endpoint import Endpoint, not_found
 from liteapi.middleware import Middleware
 from liteapi.openapi import OpenAPI
-from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint, Scope, PydanticEncoder
+from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint, Scope
+from liteapi.responses import ResponseDispatcher, response_factory, Response
 from liteapi.routing import RoutingMixin, Router
 
 
@@ -72,8 +72,9 @@ class App(RoutingMixin):
         endpoint, path_args = self._parse_path(path, method)
 
         args = {**query_args, **path_args, **body_args, '_headers': headers}
-        result, code, content_type = await _handle_endpoint(endpoint, args)
-        await _send_response(send, result, code, content_type)
+        response = await _handle_endpoint(endpoint, args)
+
+        await ResponseDispatcher(response, send).send()
 
     def _parse_path(self, path: str, method: str) -> Tuple[Endpoint, Dict[str, Any]]:
         for route, endpoints in self._endpoints.items():
@@ -86,46 +87,3 @@ class App(RoutingMixin):
                 return endpoint, path_match.named
 
         return not_found, {}
-
-
-async def _send_response(send: Callable, body: Any, status_code: int, content_type: str):
-    await send({
-        'type': 'http.response.start',
-        'status': status_code,
-        'headers': [
-            [b'content-type', content_type.encode()],
-        ],
-    })
-
-    if content_type.startswith('image') or \
-            content_type.startswith('audio') or \
-            content_type.startswith('video') or \
-            content_type == 'application/octet-stream' or \
-            isinstance(body, bytes):
-
-        if isinstance(body, list):
-            for chunk in body:
-                await send({
-                    'type': 'http.response.body',
-                    'body': chunk,
-                    'more_body': True
-                })
-            await send({
-                'type': 'http.response.body',
-                'body': b'',
-            })
-        else:
-            await send({
-                'type': 'http.response.body',
-                'body': body,
-            })
-    else:
-        if content_type == 'application/json':
-            body = json.dumps(body, cls=PydanticEncoder).encode()
-        else:
-            body = str(body).encode()
-
-        await send({
-            'type': 'http.response.body',
-            'body': body,
-        })
