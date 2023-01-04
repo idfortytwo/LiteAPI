@@ -1,30 +1,31 @@
 import json
 from json import JSONEncoder
-from typing import Any, Iterable, Callable, Union, Dict
+from typing import Any, Iterable, Callable, Union, Dict, List
 
 from pydantic import BaseModel
 
 
 class Response:
     def __init__(self, data: Any, status_code=200, content_type='text/plain'):
-        self._data = data
-        self._status_code = status_code
-        self._content_type = content_type
+        self.data = data
+        self.status_code = status_code
+        self.content_type = content_type
+
+        self._headers = [
+            [b'content-type', self.content_type.encode()],
+        ]
+
+    def add_header(self, key: str, value: str):
+        self._headers.append([
+            key.encode(), value.encode()
+        ])
+
+    @property
+    def headers(self) -> List[List[bytes]]:
+        return self._headers
 
     def to_bytes(self) -> bytes:
-        return str(self._data).encode()
-
-    @property
-    def data(self) -> Any:
-        return self._data
-
-    @property
-    def status_code(self) -> int:
-        return self._status_code
-
-    @property
-    def content_type(self) -> str:
-        return self._content_type
+        return str(self.data).encode()
 
 
 class PydanticEncoder(JSONEncoder):
@@ -50,7 +51,7 @@ class JSONResponse(Response):
         super().__init__(data, status_code, content_type)
 
     def to_bytes(self) -> bytes:
-        return json.dumps(self._data, cls=PydanticEncoder).encode()
+        return json.dumps(self.data, cls=PydanticEncoder).encode()
 
 
 class BinaryResponse(Response):
@@ -58,7 +59,7 @@ class BinaryResponse(Response):
         super().__init__(data, status_code, content_type)
 
     def to_bytes(self) -> bytes:
-        return self._data
+        return self.data
 
 
 class ChunkedBinaryResponse(Response):
@@ -66,7 +67,7 @@ class ChunkedBinaryResponse(Response):
         super().__init__(data, status_code, content_type)
 
     def to_bytes(self) -> bytes:
-        yield from self._data
+        yield from self.data
 
 
 def response_factory(data: Any, code, content_type):
@@ -96,9 +97,7 @@ class ResponseDispatcher:
         await self._send({
             'type': 'http.response.start',
             'status': self._response.status_code,
-            'headers': [
-                [b'content-type', self._response.content_type.encode()],
-            ],
+            'headers': self._response.headers,
         })
 
         body = self._response.to_bytes()

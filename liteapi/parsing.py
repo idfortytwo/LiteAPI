@@ -13,7 +13,7 @@ from liteapi.responses import Response, JSONResponse, response_factory
 
 
 @dataclass
-class Scope:
+class Request:
     type: str
     asgi: Dict[str, str]
     http_version: str
