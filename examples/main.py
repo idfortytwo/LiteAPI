@@ -3,9 +3,22 @@ from typing import List, Optional, Dict
 
 from pydantic import BaseModel
 
-from liteapi import App, Router, RequestMiddleware, ResponseMiddleware
+from liteapi import App, Router
+from liteapi.middleware import PreMiddleware, PostMiddleware
+from liteapi.requests import Request
+from liteapi.responses import PlainResponse
 
 app = App()
+
+
+class AddCORS(PostMiddleware):
+    async def postprocess(self, response):
+        response.add_header('Access-Control-Allow-Origin', '*')
+        return response
+
+
+cors = AddCORS()
+app.add_middleware(cors)
 
 
 @app.get('/positional_and_query/{pos1}/{pos2}')
@@ -82,7 +95,15 @@ async def download_image(image_name: str = 'a'):
         return resp
 
 
+class PathLogger(PreMiddleware):
+    async def preprocess(self, request: Request):
+        print(f'path: {request.scope.path}')
+        return request
+
+
+path_logger = PathLogger()
 model_router = Router('/models')
+model_router.add_middleware(path_logger)
 
 
 @model_router.get('/model-output', content_type='application/json')
@@ -135,17 +156,17 @@ app.add_router(text_router, prefix='/plaintext')
 app.add_router(model_router)
 
 
-class LogPath(RequestMiddleware):
-    async def handle(self, request):
-        print(f'path: {request.path}')
+class MagicGuard(PreMiddleware):
+    async def preprocess(self, request: Request):
+        if request.scope.headers.get('magic_code', None) != '123':
+            return PlainResponse('You shall not pass!', 401)
         return request
 
 
-class AddCORS(ResponseMiddleware):
-    async def handle(self, response):
-        response.add_header('Access-Control-Allow-Origin', '*')
-        return response
+guard = MagicGuard()
 
 
-app.add_middleware(LogPath())
-app.add_middleware(AddCORS())
+@guard
+@app.get('/magic')
+def enter_with_magic():
+    return 'Passage granted'

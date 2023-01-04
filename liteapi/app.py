@@ -1,11 +1,11 @@
-from typing import Callable, Dict, Tuple, Any, List, Union
+from typing import Callable, Dict, Tuple, Any
 
 from parse import parse
 
 from liteapi.endpoint import Endpoint, not_found
-from liteapi.middleware import RequestMiddleware, ResponseMiddleware
 from liteapi.openapi import OpenAPI
-from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint, Request
+from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint
+from liteapi.requests import Scope, Request
 from liteapi.responses import ResponseDispatcher, Response
 from liteapi.routing import RoutingMixin, Router
 
@@ -17,10 +17,9 @@ class App(RoutingMixin):
             doc_path='/api',
             doc_json_path='/api_json'
     ):
-        self._endpoints: Dict[str, Dict[str, Endpoint]] = {}
-        self._request_middlewares: List[RequestMiddleware] = []
-        self._response_middlewares: List[ResponseMiddleware] = []
+        super().__init__()
 
+        self._endpoints: Dict[str, Dict[str, Endpoint]] = {}
         self._title = title
         self._doc_path = doc_path
         self._doc_json_path = doc_json_path
@@ -49,41 +48,23 @@ class App(RoutingMixin):
 
         self._endpoints.update(new_endpoints)
 
-    def add_middleware(self, cls: Union[RequestMiddleware, ResponseMiddleware]):
-        if isinstance(cls, RequestMiddleware):
-            self._request_middlewares.append(cls)
-        else:
-            self._response_middlewares.append(cls)
-
     async def __call__(self, scope: dict, receive: Callable, send: Callable):
-        request = Request(**scope)
-
-        for middleware in self._request_middlewares:
-            request = await middleware.handle(request)
-
-        response = await self._process_request(request, receive)
-
-        for middleware in self._response_middlewares:
-            response = await middleware.handle(response)
-
+        scope = Scope(**scope)
+        response = await self._process_request(scope, receive)
         await ResponseDispatcher(response, send).send()
 
-    async def _process_request(self, scope: Request, receive) -> Response:
+    async def _process_request(self, scope: Scope, receive) -> Response:
         method = scope.method
         path = scope.path
-        headers = scope.headers
-
-        content_type = None
-        for key, value in headers.items():
-            if key == 'content-type':
-                content_type = value
+        content_type = scope.headers.get('content-type', None)
 
         query_args = _parse_query_params(scope.query_string.decode())
         body_args = await _parse_body(receive, content_type)
         endpoint, path_args = self._parse_path(path, method)
 
-        args = {**query_args, **path_args, **body_args, '_headers': headers}
-        return await _handle_endpoint(endpoint, args)
+        args = {**query_args, **path_args, **body_args}
+        request = Request(scope, args)
+        return await _handle_endpoint(endpoint, request)
 
     def _parse_path(self, path: str, method: str) -> Tuple[Endpoint, Dict[str, Any]]:
         for route, endpoints in self._endpoints.items():

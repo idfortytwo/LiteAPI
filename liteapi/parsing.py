@@ -1,42 +1,14 @@
 import cgi
 import inspect
 import json
-import traceback
-from dataclasses import dataclass, field
 from io import BytesIO
-from typing import Dict, Any, Tuple, List, get_origin, Union, get_args
+from typing import Dict, Any, get_origin, Union, get_args
 
 from pydantic import BaseModel, ValidationError
 
 from liteapi.endpoint import Endpoint
-from liteapi.responses import Response, JSONResponse, response_factory
-
-
-@dataclass
-class Request:
-    type: str
-    asgi: Dict[str, str]
-    http_version: str
-    server: Tuple[str, int]
-    client: Tuple[str, int]
-    scheme: str
-    method: str
-    root_path: str
-    path: str
-    raw_path: bytes
-    query_string: bytes
-    headers: Dict[str, str]
-    _headers: Dict[str, str] = field(repr=False, init=False)
-
-    @property
-    def headers(self):
-        return self._headers
-
-    @headers.setter
-    def headers(self, headers: List[Tuple[bytes, bytes]]):
-        self._headers = {}
-        for key, value in headers:
-            self._headers[key.decode()] = value.decode()
+from liteapi.requests import Request
+from liteapi.responses import Response, JSONResponse
 
 
 def _parse_query_params(query_params: str) -> Dict[str, str]:
@@ -78,36 +50,16 @@ async def _read_body(receive) -> bytes:
     return body
 
 
-async def _handle_endpoint(endpoint: Endpoint, args: Dict[str, Any]) -> Response:
-    parsed_args = {}
-
-    error_response = _validate_and_convert_args(endpoint.signature, args, parsed_args)
+async def _handle_endpoint(endpoint: Endpoint, request: Request) -> Response:
+    error_response = _validate_and_convert_args(endpoint.signature, request)
     if error_response:
         return error_response
 
-    try:
-        if inspect.iscoroutinefunction(endpoint.func):
-            result = await endpoint.func(**parsed_args)
-        else:
-            result = endpoint.func(**parsed_args)
-    except Exception as e:
-        response = {
-            'message': 'internal server error',
-            'error': str(e),
-            'details': traceback.format_exc()
-        }
-        return JSONResponse(response, 500)
-
-    match result:
-        case Response():
-            return result
-        case data, int(code):
-            return response_factory(data, code, endpoint.content_type)
-        case data:
-            return response_factory(data, endpoint.status_code, endpoint.content_type)
+    return await endpoint.handle(request)
 
 
-def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: Dict):
+def _validate_and_convert_args(sig: inspect.Signature, request: Request):
+    parsed_args = {}
     for param in sig.parameters.values():
         cls = param.annotation
         optional = is_optional(param)
@@ -116,9 +68,9 @@ def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: 
             if optional:
                 cls = extract_from_optional(param)
             if issubclass(cls, BaseModel):
-                arg = cls(**args)
+                arg = cls(**request.args)
             else:
-                arg = cls(args[param.name])
+                arg = cls(request.args[param.name])
         except ValidationError as e:
             response = {
                 'message': 'validation failed',
@@ -131,7 +83,7 @@ def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: 
                 'details': {
                     'param_name': param.name,
                     'param_type': cls.__name__,
-                    'value': args[param.name]
+                    'value': request.args[param.name]
                 }
             }
             return JSONResponse(response, 400)
@@ -151,6 +103,7 @@ def _validate_and_convert_args(sig: inspect.Signature, args: Dict, parsed_args: 
                 arg = param.default
 
         parsed_args[param.name] = arg
+    request.args = parsed_args
 
 
 def is_optional(param: inspect.Parameter):
