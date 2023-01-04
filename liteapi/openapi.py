@@ -190,7 +190,7 @@ class OpenAPI:
             return 'query'
 
     def _get_responses(self, endpoint: Endpoint) -> Optional[Dict[str, Any]]:
-        response_schema = self._parse_return_annotation(endpoint.signature.return_annotation)
+        response_schema = self._parse_return_annotation(endpoint.returns)
         return {
             str(endpoint.status_code): {
                 'content': {

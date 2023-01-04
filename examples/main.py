@@ -90,7 +90,7 @@ def single_model() -> TestModel:
     return TestModel(some_string="some_string", some_float=3.14, numbers=[1, 2, 3])
 
 
-@model_router.get('/list-output', content_type='application/json')
+@model_router.get('/list-output', content_type='application/json', returns=List[TestModel])
 def model_list() -> List[TestModel]:
     return [
         TestModel(some_string="some_string", some_float=3.14, numbers=[1, 2, 3]),

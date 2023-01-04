@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from inspect import signature, Signature
-from typing import Callable, List
+from typing import Callable, List, Type
 
 
 @dataclass
@@ -9,6 +9,7 @@ class Endpoint:
     http_method: str
     status_code: int
     content_type: str
+    returns: Type = None
     tags: List[str] = None
     signature: Signature = field(init=False, repr=False)
 
