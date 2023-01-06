@@ -1,33 +1,33 @@
 @startuml
 
-class RoutingMixin {
-    - _endpoints: Dict[str, Endpoint]
-    + route(str, str, int, str): Callable
-    + get(str, int, str): Callable
-    + post(str, int, str): Callable
-    + put(str, int, str): Callable
-    + patch(str, int, str): Callable
-    + delete(str, int, str): Callable
+class routing.RoutingMixin {
+    - _endpoints: Dict[str, Dict[str, Endpoint]]
+    - _middlewares: List[PreMiddleware, PostMiddleware]
+    + route(str, str, int, str, Type): Callable
+    + get(str, int, str, Type): Callable
+    + post(str, int, str, Type): Callable
+    + put(str, int, str, Type): Callable
+    + patch(str, int, str, Type): Callable
+    + delete(str, int, str, Type): Callable
 }
 
 class App {
     - _endpoints: Dict[str, Endpoint]
-    - _middlewares: List[Middleware]
+    - _title: str
+    - _doc_path: str
+    - _doc_json_path: str
 
-    + add_router(Router, str)
-    + add_middleware(Middleware)
     + __call__(Dict, Callable, Callable)
-    - _handle(Dict, Callable, Callable)
-    - _parse_path(str, str): Endpoint, Dict
-    - _send_response(Callable, Any, int, str)
+    + add_routing.Router(routing.Router, str)
+    - _setup_openapi()
+    - _process_request(RequestScope, Callable): Response
 }
 
 
-class Router {
-    - _endpoints: Dict[str, Endpoint]
-    - _prefix: str
-    + endpoints(): Dict[str, Endpoint]
-    + prefix(): str
+class routing.Router {
+    - prefix: str
+    + endpoints: Dict[str, Dict[str, Endpoint]]
+    + tags: List[str]
 }
 
 class Endpoint {
@@ -35,32 +35,173 @@ class Endpoint {
     + http_method: str
     + status_code: int
     + content_type: str
-}
+    + returns: Type
+    + tags: List[str]
+    + signature: Signature
+    + preprocessors: List[Callable]
+    + postprocessors: List[Callable]
 
-abstract class Middleware {
-    + {abstract} handle(Dict, Callable, Callable): Dict, Callable, Callable
-}
-
-class parsing {
-    - _parse_query_params(str): Dict[str, str]
-    - _parse_body(Callable, str) -> Dict[str, Any]
-    - _read_body(Callable) -> bytes:
-    - _handle_endpoint(Endpoint, Dict[str, Any]) -> Any, int, str:
-    - _parse_args(Endpoint, Dict, Dict)
+    + process(Request): Response
+    - _process_func(Any[0..*])
 }
 
 
-Router -u-|> RoutingMixin
-App -u-|> RoutingMixin
+abstract class errors.ParsingError {
+    + {abstract} to_request(): JSONResponse
+}
 
-Router "*" *-- "*" Endpoint
-App "1" *-- "*" Endpoint
+class errors.PydanticError  {
+    + to_request(): JSONResponse
+}
 
-App "1" o-l- "*" Router
+class errors.ConversionError {
+    + param_name: str
+    + param_type: str
+    + arg_value: Any
+    + to_request(): JSONResponse
+}
 
-App "1" *-u- "*" Middleware
-App o-r-  parsing
+class errors.MissingRequiredError {
+    + param_name: str
+    + param_type: str
+    + to_request(): JSONResponse
+}
 
-parsing o-- "*" Endpoint
+
+abstract class middleware.PreMiddleware {
+    + __call__(Endpoint): Endpoint
+    + {abstract} preprocess(Request): Union[Request, Response]
+}
+
+abstract class middleware.PostMiddleware {
+    + __call__(Endpoint): Endpoint
+    + {abstract} postprocess(Response): Response
+}
+
+
+class OpenAPI {
+    - _endpoints: Dict[str, Dict[str, Endpoint]],
+    - _doc_path: str,
+    - _doc_json_path: str,
+    - _app_title: str
+    - _schemas: Set[Type[BaseModel]]
+    - {static} _type_map: Dict[Type, Dict]
+
+    + doc_endpoint(): HTMLResponse
+    + doc_json_endpoint(): JSONResponse
+    - _get_endpoint_data(Endpoint, str): Dict[str, Any]
+    - _get_params_and_request_body(Endpoint, str): Tuple
+    - _type_to_schema(Type): Dict[str, str]
+    - {static} _get_param_location(str, str): str
+    - _get_responses(Endpoint): Dict[str, Any]
+    - _parse_return_annotation(Type): Dict[str, Any]
+}
+
+
+class RequestParser {
+    - _endpoints: Dict[str, Dict[str, Endpoint]]
+    - _request_scope: requests.RequestScope
+    - _receive: Callable
+
+    + extract_args_and_endpoint(): Tuple[Dict, Endpoint]
+    - _parse_query(str): Dict[str, str]
+    - _parse_body(str): Dict[str, Any]
+    - _read_body(): bytes:
+    - _parse_args(str, str): Tuple[Endpoint, Dict[str, Any]]
+}
+
+class EndpointProcessor {
+    - _endpoint: Endpoint
+    - _request: requests.Request
+
+    + execute(): Response
+    - _validate_and_convert_args()
+}
+
+class requests.RequestScope {
+    + type: str
+    + asgi: Dict[str, str]
+    + http_version: str
+    + server: Tuple[str, int]
+    + client: Tuple[str, int]
+    + scheme: str
+    + method: str
+    + root_path: str
+    + path: str
+    + raw_path: bytes
+    + query_string: bytes
+    + headers: Dict[str, str]
+    - _headers: Dict[str, str]
+}
+
+class requests.Request {
+    + scope: requests.RequestScope
+    + args: Dict[str, Any]
+}
+
+class responses.Response {
+    + data: Any
+    + status_code: int
+    + content_type: str
+    + headers: List[List[bytes]]
+
+    + add_header(str, str)
+    + to_bytes(): bytes
+}
+
+class responses.PlainResponse
+class responses.HTMLResponse
+class responses.JSONResponse
+class responses.BinaryResponse
+class responses.ChunkedBinaryResponse
+
+responses.PlainResponse         -r-|> responses.Response
+responses.HTMLResponse          -l-|> responses.Response
+responses.JSONResponse          -d-|> responses.Response
+responses.BinaryResponse        --|> responses.Response
+responses.ChunkedBinaryResponse -d-|> responses.Response
+
+class responses.ResponseDispatcher {
+    - _response: Response
+    - _send: Callable
+
+    + send()
+}
+
+
+routing.Router -d-|> routing.RoutingMixin
+App --|> routing.RoutingMixin
+routing.Router "*" *-- "*" Endpoint
+App "1" *-u- "*" Endpoint
+App "1" o-- "*" routing.Router
+
+App "1" *-- "1" OpenAPI
+App "1" *-l- "1" requests.RequestScope
+App "1" *-- "1" RequestParser
+App "1" *-l- "1" EndpointProcessor
+App "1" *-u- "1" responses.ResponseDispatcher
+
+RequestParser "1" o-- "*" Endpoint
+RequestParser "1" o-- "1" requests.RequestScope
+
+requests.Request "1" o-d- "1" requests.RequestScope
+
+EndpointProcessor "1" o-- "1" Endpoint
+EndpointProcessor "1" o-l- "1" requests.Request
+EndpointProcessor "1" o-u- "1" errors.ParsingError
+
+errors.ParsingError -l-|> errors.PydanticError
+errors.ParsingError -u-|> errors.ConversionError
+errors.ParsingError -u-|> errors.MissingRequiredError
+
+responses.ResponseDispatcher "1" o-u- "1" responses.Response
+
+routing.RoutingMixin "*" -l--- "*" Endpoint
+Endpoint "1" o-- "1" requests.Request
+Endpoint "1" *-- "1" responses.Response
+
+'middleware.PreMiddleware -- middleware.PostMiddleware
+routing.RoutingMixin "1" o-d- "*" middleware.PreMiddleware
+routing.RoutingMixin "1" o-d- "*" middleware.PostMiddleware
 
 @enduml
