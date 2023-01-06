@@ -26,19 +26,19 @@ class Endpoint:
         self.preprocessors = []
         self.postprocessors = []
 
-    async def handle(self, request: Request) -> Response:
+    async def process(self, request: Request) -> Response:
         for preprocessor in self.preprocessors:
             request = await preprocessor(request)
             if isinstance(request, Response):
                 return request
 
-        response = await self._process(**request.args)
+        response = await self._process_func(**request.args)
 
         for postprocessor in self.postprocessors:
             response = await postprocessor(response)
         return response
 
-    async def _process(self, *args, **kwargs) -> Response:
+    async def _process_func(self, *args, **kwargs) -> Response:
         if inspect.iscoroutinefunction(self.func):
             result = await self.func(*args, **kwargs)
         else:
@@ -55,4 +55,4 @@ class Endpoint:
         return response
 
 
-not_found = Endpoint(lambda: 'No such endpoint', 'GET', 404, 'application/json')
+not_found = Endpoint(lambda: {'message': 'No such endpoint'}, 'GET', 404, 'application/json')

@@ -3,7 +3,7 @@ from typing import Dict, Tuple, List, Any
 
 
 @dataclass
-class Scope:
+class RequestScope:
     type: str
     asgi: Dict[str, str]
     http_version: str
@@ -30,6 +30,6 @@ class Scope:
 
 
 class Request:
-    def __init__(self, scope: Scope, args: Dict[str, Any]):
+    def __init__(self, scope: RequestScope, args: Dict[str, Any]):
         self.scope = scope
         self.args = args

@@ -24,18 +24,3 @@ class PostMiddleware(ABC):
     @abstractmethod
     async def postprocess(self, response: Response) -> Response:
         pass
-
-
-class Middleware(ABC):
-    def __call__(self, endpoint: Endpoint):
-        endpoint.preprocessors.append(self.preprocess)
-        endpoint.postprocessors.append(self.postprocess)
-        return endpoint
-
-    @abstractmethod
-    async def preprocess(self, request: Request) -> Union[Request, Response]:
-        pass
-
-    @abstractmethod
-    async def postprocess(self, response: Response) -> Response:
-        pass

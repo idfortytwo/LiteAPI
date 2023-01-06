@@ -1,7 +1,7 @@
 from typing import Dict, Callable, List, Type, Union
 
 from liteapi.endpoint import Endpoint
-from liteapi.middleware import PreMiddleware, PostMiddleware, Middleware
+from liteapi.middleware import PreMiddleware, PostMiddleware
 
 
 class RoutingMixin:
@@ -49,8 +49,7 @@ class RoutingMixin:
                returns: Type = None):
         return self.route(path, 'DELETE', status_code=status_code, content_type=content_type, returns=returns)
 
-    def add_middleware(self, middleware: Union[PreMiddleware, PostMiddleware, Middleware]):
-        print('adding middleware')
+    def add_middleware(self, middleware: Union[PreMiddleware, PostMiddleware]):
         self._middlewares.append(middleware)
 
 
@@ -63,7 +62,7 @@ class Router(RoutingMixin):
         self._tags = tags
 
     @property
-    def tag(self) -> List[str]:
+    def tags(self) -> List[str]:
         if self._tags is not None:
             return self._tags
         else:

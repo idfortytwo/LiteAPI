@@ -1,11 +1,9 @@
-from typing import Callable, Dict, Tuple, Any
+from typing import Callable, Dict
 
-from parse import parse
-
-from liteapi.endpoint import Endpoint, not_found
+from liteapi.endpoint import Endpoint
 from liteapi.openapi import OpenAPI
-from liteapi.parsing import _parse_query_params, _parse_body, _handle_endpoint
-from liteapi.requests import Scope, Request
+from liteapi.parsing import RequestParser, EndpointProcessor
+from liteapi.requests import RequestScope, Request
 from liteapi.responses import ResponseDispatcher, Response
 from liteapi.routing import RoutingMixin, Router
 
@@ -43,37 +41,18 @@ class App(RoutingMixin):
         new_endpoints = {}
         for route, endpoints in router.endpoints.items():
             for endpoint in endpoints.values():
-                endpoint.tags = router.tag
+                endpoint.tags = router.tags
             new_endpoints[router.prefix + route] = endpoints
 
         self._endpoints.update(new_endpoints)
 
     async def __call__(self, scope: dict, receive: Callable, send: Callable):
-        scope = Scope(**scope)
+        scope = RequestScope(**scope)
         response = await self._process_request(scope, receive)
         await ResponseDispatcher(response, send).send()
 
-    async def _process_request(self, scope: Scope, receive) -> Response:
-        method = scope.method
-        path = scope.path
-        content_type = scope.headers.get('content-type', None)
-
-        query_args = _parse_query_params(scope.query_string.decode())
-        body_args = await _parse_body(receive, content_type)
-        endpoint, path_args = self._parse_path(path, method)
-
-        args = {**query_args, **path_args, **body_args}
-        request = Request(scope, args)
-        return await _handle_endpoint(endpoint, request)
-
-    def _parse_path(self, path: str, method: str) -> Tuple[Endpoint, Dict[str, Any]]:
-        for route, endpoints in self._endpoints.items():
-            path_match = parse(route, path)
-            if path_match:
-                endpoint = endpoints.get(
-                    method,
-                    endpoints.get('ANY', not_found)
-                )
-                return endpoint, path_match.named
-
-        return not_found, {}
+    async def _process_request(self, scope: RequestScope, receive: Callable) -> Response:
+        parser = RequestParser(self._endpoints, scope, receive)
+        args, endpoint = await parser.extract_args_and_endpoint()
+        processor = EndpointProcessor(endpoint, Request(scope, args))
+        return await processor.execute()

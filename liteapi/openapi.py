@@ -104,11 +104,8 @@ class OpenAPI:
 
         return endpoint_data
 
-    def _get_params_and_request_body(
-            self,
-            endpoint: Endpoint,
-            path: str
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    def _get_params_and_request_body(self, endpoint: Endpoint, path: str)\
+            -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         params = []
         json_content = {}
         form_data = {}
